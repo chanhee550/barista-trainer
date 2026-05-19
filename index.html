@@ -3,49 +3,101 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="theme-color" content="#2c1810">
+<meta name="theme-color" content="#1a1612">
 <title>Aussie Barista Trainer ☕</title>
 <style>
+  :root {
+    --bg: #1a1612;
+    --bg-1: #221d19;
+    --bg-2: #2b2520;
+    --text: #f4ede2;
+    --text-muted: #a89788;
+    --text-dim: #756a5f;
+    --accent: #e8b88a;
+    --accent-strong: #f3d2af;
+    --border: rgba(255, 255, 255, 0.08);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   body {
-    margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
-    background: #2c1810; color: #f5f0e8;
-    font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+    margin: 0; min-height: 100vh; min-height: 100dvh;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--bg);
+    background-image:
+      radial-gradient(800px 600px at -10% -10%, rgba(232, 184, 138, 0.045), transparent 60%),
+      radial-gradient(700px 500px at 110% 110%, rgba(232, 184, 138, 0.025), transparent 55%);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Pretendard', 'Segoe UI', system-ui, sans-serif;
     text-align: center;
+    letter-spacing: -0.01em;
+    padding: 24px;
   }
-  .loader { padding: 40px; max-width: 420px; }
-  .loader h2 { font-size: 1.4rem; margin-bottom: 8px; color: #d4a373; }
-  .loader p { color: #b0a090; font-size: 0.95rem; margin-bottom: 18px; }
+  .loader { padding: 40px 32px; max-width: 440px; }
+  .loader h2 {
+    font-size: 1.6rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+    letter-spacing: -0.025em;
+    background: linear-gradient(135deg, var(--accent-strong) 0%, var(--accent) 70%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .loader p {
+    color: var(--text-muted);
+    font-size: 0.92rem;
+    margin-bottom: 24px;
+    line-height: 1.5;
+  }
   .loader a {
-    display: inline-block; padding: 12px 24px; background: #d4a373; color: #2c1810;
-    border-radius: 8px; text-decoration: none; font-size: 0.95rem; margin: 6px;
-    font-weight: bold;
+    display: inline-block;
+    padding: 12px 22px;
+    background: var(--bg-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    text-decoration: none;
+    font-size: 0.88rem;
+    margin: 4px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    transition: all 160ms cubic-bezier(0.2, 0, 0, 1);
   }
-  .loader a.secondary { background: #5a3a22; color: #f5f0e8; }
+  .loader a:hover { background: #322a26; transform: translateY(-1px); border-color: rgba(232, 184, 138, 0.3); }
+  .loader a.primary {
+    background: linear-gradient(180deg, var(--accent-strong) 0%, var(--accent) 100%);
+    color: #1a1612;
+    border-color: transparent;
+    font-weight: 600;
+  }
+  .loader a.primary:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(232, 184, 138, 0.25); }
   .spinner {
     width: 36px; height: 36px;
-    border: 3px solid #5a3a22; border-top-color: #d4a373;
-    border-radius: 50%; animation: spin 0.8s linear infinite;
-    margin: 0 auto 18px;
+    border: 2.5px solid rgba(255, 255, 255, 0.08);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 22px;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
+  #manual p { font-size: 0.8rem; color: var(--text-dim); margin-bottom: 12px; }
 </style>
 </head>
 <body>
 <main class="loader">
   <div class="spinner"></div>
-  <h2>☕ Aussie Barista Trainer</h2>
+  <h2>Aussie Barista Trainer</h2>
   <p>기기를 감지하는 중...</p>
   <noscript>
-    <p style="color:#f87171;">JavaScript가 필요합니다. 직접 선택해 주세요:</p>
-    <a href="barista-pc.html">PC 버전</a>
-    <a href="barista-ios.html">iPhone 버전</a>
-    <a href="barista-mobile.html">Android 버전</a>
+    <p style="color:#e88080;">JavaScript가 필요합니다. 직접 선택해 주세요:</p>
+    <a href="barista-pc.html">PC</a>
+    <a href="barista-ios.html">iPhone</a>
+    <a href="barista-mobile.html">Android</a>
   </noscript>
   <div id="manual" style="display:none;">
-    <p>자동 이동이 안 될 경우 직접 선택하세요:</p>
-    <a href="barista-pc.html">PC 버전</a>
-    <a href="barista-ios.html">iPhone 버전</a>
-    <a href="barista-mobile.html">Android 버전</a>
+    <p>자동 이동이 안 되면 직접 선택:</p>
+    <a href="barista-pc.html">PC</a>
+    <a href="barista-ios.html">iPhone</a>
+    <a href="barista-mobile.html">Android</a>
   </div>
 </main>
 <script>
@@ -70,7 +122,6 @@
   } catch(e) {
     document.getElementById('manual').style.display = 'block';
   }
-
   setTimeout(function() {
     document.getElementById('manual').style.display = 'block';
   }, 2000);
