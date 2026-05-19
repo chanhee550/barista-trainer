@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="description" content="호주 카페 바리스타 주문 훈련 게임 (PC 버전)">
 <title>Aussie Barista Trainer ☕ (PC)</title>
-<link rel="stylesheet" href="style.css?v=2">
+<link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
 <div id="game">
@@ -48,6 +48,7 @@
           <button class="action-btn place" data-action="place" data-cup="S">+ Small</button>
           <button class="action-btn place" data-action="place" data-cup="M">+ Medium</button>
           <button class="action-btn place" data-action="place" data-cup="L">+ Large</button>
+          <button class="action-btn place" data-action="place" data-cup="K">+ Keep</button>
         </div>
         <div class="pull-row">
           <button class="pull-btn" data-action="pull">PULL (2 shots)</button>
@@ -73,11 +74,22 @@
           <button class="action-btn place" data-action="place" data-cup="S">+ Small</button>
           <button class="action-btn place" data-action="place" data-cup="M">+ Medium</button>
           <button class="action-btn place" data-action="place" data-cup="L">+ Large</button>
+          <button class="action-btn place" data-action="place" data-cup="K">+ Keep</button>
         </div>
         <div class="pull-row">
           <button class="pull-btn" data-action="pull">PULL (2 shots)</button>
         </div>
       </div>
+    </div>
+    <div class="shot-bank-row">
+      <div class="bank-label">☕ Spare Shots</div>
+      <div id="shot-bank" class="bank-slots">
+        <div class="bank-slot"></div>
+        <div class="bank-slot"></div>
+        <div class="bank-slot"></div>
+      </div>
+      <div class="bank-count" id="bank-count">0 / 3</div>
+      <div class="bank-help">+ Keep 컵으로 받은 샷이 자동 보관 · 각 컵의 ☕+1 로 사용</div>
     </div>
   </div>
   <div class="help-text">
@@ -103,6 +115,7 @@
       <li>샷 완성 후 필요한 <b>재료</b> 추가 (🥛 우유 / 💧 핫워터 / 🍫 초콜릿)</li>
       <li><b>✋ Take</b>로 컵 들고, <b>주문 카드</b> 클릭해서 서빙</li>
       <li>들고 있는 컵을 다시 빈 슬롯에 클릭하면 <b>재료 추가/수정</b> 가능</li>
+      <li><b>+ Keep</b> 컵으로 1샷 따로 받아 보관 → 다른 컵에 <b>☕+1</b> 로 부어쓰기</li>
       <li>틀린 컵·샷·재료 서빙하거나 시간 초과 시 ❤ 잃음</li>
     </ul>
     <div class="hint-box">
@@ -142,6 +155,6 @@
   </div>
 </div>
 
-<script src="game.js?v=4"></script>
+<script src="game.js?v=5"></script>
 </body>
 </html>

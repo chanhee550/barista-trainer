@@ -12,7 +12,7 @@ const DRINKS = [
   { name: 'Long Black',  cup: 'L', defaultShots: 2, ingredients: ['hot_water'] },
 ];
 
-const CUP_LABEL = { S: 'Small', M: 'Medium', L: 'Large' };
+const CUP_LABEL = { S: 'Small', M: 'Medium', L: 'Large', K: 'Keeper' };
 const ING_LABEL = { milk: 'Milk', hot_water: 'Hot Water', chocolate: 'Chocolate' };
 const ING_EMOJI = { milk: '🥛', hot_water: '💧', chocolate: '🍫' };
 
@@ -21,6 +21,7 @@ const SHOT_FILL_PCT = 27;       // % cup fill per shot
 const HOT_WATER_FILL_PCT = 25;  // additional % when hot water added
 const MAX_CUP_FILL_PCT = 95;
 const TOAST_DURATION_MS = 2600;
+const MAX_SAVED_SHOTS = 3;       // 보관함 최대 용량
 
 let state;
 let gameStarted = false;
@@ -52,6 +53,7 @@ function initState() {
     nextOrderId: 1,
     stations: [emptyStation(), emptyStation()],
     held: null,
+    savedShots: 0,
     lastOrderTime: 0,
     gameOver: false,
     nextLevelScore: 500,
@@ -170,8 +172,22 @@ function updatePulls() {
   for (const s of state.stations) {
     if (s.pulling && now - s.pullStart >= s.pullDuration) {
       s.pulling = false;
-      for (const c of s.cups) {
-        if (c) c.shots = c.targetShots;
+      for (let i = 0; i < s.cups.length; i++) {
+        const c = s.cups[i];
+        if (!c) continue;
+        c.shots = c.targetShots;
+        // Keeper 컵은 추출 완료 즉시 보관함으로 자동 이동
+        if (c.cup === 'K') {
+          const space = MAX_SAVED_SHOTS - state.savedShots;
+          const added = Math.min(space, c.shots);
+          state.savedShots += added;
+          if (added < c.shots) {
+            toast(`☕ 보관함 꽉 참 · ${c.shots - added}샷 폐기`, 'error');
+          } else if (added > 0) {
+            toast(`☕ ${added}샷 보관함에 추가`, 'success');
+          }
+          s.cups[i] = null;
+        }
       }
     }
   }
@@ -183,6 +199,7 @@ function addIngredientAt(stationIdx, cupIdx, ing) {
   if (s.pulling) return;
   const c = s.cups[cupIdx];
   if (!c || c.shots === 0) return;
+  if (c.cup === 'K') return;  // Keeper 컵은 재료 받지 않음
   if (c.ingredients.includes(ing)) {
     toast(`${ING_EMOJI[ing]} 이미 들어갔어요`, 'error');
     return;
@@ -196,6 +213,7 @@ function takeCupAt(stationIdx, cupIdx) {
   if (s.pulling) return;
   const c = s.cups[cupIdx];
   if (!c || c.shots === 0) return;
+  if (c.cup === 'K') return;  // Keeper 는 추출 후 자동 보관 (들 수 없음)
   if (state.held) { toast('이미 컵을 들고 있어요!', 'error'); return; }
   state.held = {
     cup: c.cup,
@@ -203,6 +221,19 @@ function takeCupAt(stationIdx, cupIdx) {
     ingredients: [...c.ingredients],
   };
   s.cups[cupIdx] = null;
+}
+
+function useSavedShot(stationIdx, cupIdx) {
+  if (state.gameOver) return;
+  if (state.savedShots <= 0) { toast('보관된 샷이 없어요', 'error'); return; }
+  const s = state.stations[stationIdx];
+  if (s.pulling) return;
+  const c = s.cups[cupIdx];
+  if (!c) return;
+  if (c.cup === 'K') return;
+  if (c.shots >= 3) { toast('샷이 3개 꽉 찼어요', 'error'); return; }
+  c.shots++;
+  state.savedShots--;
 }
 
 function discardCupAt(stationIdx, cupIdx) {
@@ -300,11 +331,12 @@ function initSlotRefs() {
 
 function buildCupActionButtons(actionsEl, cupIdx) {
   actionsEl.innerHTML = `
-    <button class="action-btn ing-milk"  data-action="add"     data-cup-index="${cupIdx}" data-ing="milk">🥛</button>
-    <button class="action-btn ing-water" data-action="add"     data-cup-index="${cupIdx}" data-ing="hot_water">💧</button>
-    <button class="action-btn ing-choc"  data-action="add"     data-cup-index="${cupIdx}" data-ing="chocolate">🍫</button>
-    <button class="action-btn take"      data-action="take"    data-cup-index="${cupIdx}">✋</button>
-    <button class="action-btn discard"   data-action="discard" data-cup-index="${cupIdx}">×</button>
+    <button class="action-btn ing-milk"  data-action="add"        data-cup-index="${cupIdx}" data-ing="milk">🥛</button>
+    <button class="action-btn ing-water" data-action="add"        data-cup-index="${cupIdx}" data-ing="hot_water">💧</button>
+    <button class="action-btn ing-choc"  data-action="add"        data-cup-index="${cupIdx}" data-ing="chocolate">🍫</button>
+    <button class="action-btn use-saved" data-action="use-saved"  data-cup-index="${cupIdx}">☕+1</button>
+    <button class="action-btn take"      data-action="take"       data-cup-index="${cupIdx}">✋</button>
+    <button class="action-btn discard"   data-action="discard"    data-cup-index="${cupIdx}">×</button>
   `;
 }
 
@@ -378,6 +410,7 @@ function renderStation(stationIdx, now) {
     }
 
     slot.classList.remove('empty', 'can-place');
+    slot.classList.toggle('keeper', c.cup === 'K');
     if (!actions.firstChild) buildCupActionButtons(actions, i);
 
     // Cup fill calculation
@@ -405,10 +438,17 @@ function renderStation(stationIdx, now) {
 
     // Button enable/disable
     const noShots = c.shots === 0;
+    const isKeeper = c.cup === 'K';
     actions.querySelectorAll('button').forEach(b => {
       const a = b.dataset.action;
-      if (a === 'add' || a === 'take') b.disabled = noShots || s.pulling;
-      else if (a === 'discard') b.disabled = s.pulling;
+      if (a === 'add')              b.disabled = noShots || s.pulling || isKeeper;
+      else if (a === 'take')        b.disabled = noShots || s.pulling || isKeeper;
+      else if (a === 'use-saved') {
+        const empty = state.savedShots <= 0;
+        b.classList.toggle('bank-empty', empty);  // CSS hides when empty
+        b.disabled = s.pulling || isKeeper || c.shots >= 3 || empty;
+      }
+      else if (a === 'discard')     b.disabled = s.pulling;
     });
   }
 }
@@ -485,6 +525,7 @@ function renderOrders(now) {
 
 // Cache HUD refs (set after DOM available, see initSlotRefs caller)
 let hudRefs = null;
+let bankRefs = null;
 function initHudRefs() {
   hudRefs = {
     score: document.getElementById('score'),
@@ -494,6 +535,19 @@ function initHudRefs() {
     held: document.getElementById('held-cup'),
     heldLabel: document.getElementById('held-cup-label'),
   };
+  bankRefs = {
+    slots: document.querySelectorAll('#shot-bank .bank-slot'),
+    count: document.getElementById('bank-count'),
+  };
+}
+
+function renderBank() {
+  if (!bankRefs.slots.length) return;
+  for (let i = 0; i < bankRefs.slots.length; i++) {
+    bankRefs.slots[i].classList.toggle('filled', i < state.savedShots);
+  }
+  const txt = `${state.savedShots} / ${MAX_SAVED_SHOTS}`;
+  if (bankRefs.count.textContent !== txt) bankRefs.count.textContent = txt;
 }
 
 function render(now) {
@@ -510,6 +564,7 @@ function render(now) {
   renderOrders(now);
   renderStation(0, now);
   renderStation(1, now);
+  renderBank();
 
   if (state.held) {
     hudRefs.held.classList.add('active');
@@ -535,6 +590,7 @@ document.querySelectorAll('.station').forEach(stEl => {
       else if (action === 'pull') pullAt(idx);
       else if (action === 'add') addIngredientAt(idx, parseInt(btn.dataset.cupIndex), btn.dataset.ing);
       else if (action === 'take') takeCupAt(idx, parseInt(btn.dataset.cupIndex));
+      else if (action === 'use-saved') useSavedShot(idx, parseInt(btn.dataset.cupIndex));
       else if (action === 'discard') discardCupAt(idx, parseInt(btn.dataset.cupIndex));
       return;
     }

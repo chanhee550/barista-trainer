@@ -299,6 +299,12 @@ h1 {
 .cup-visual.S { width: 42px; height: 42px; }
 .cup-visual.M { width: 58px; height: 56px; }
 .cup-visual.L { width: 68px; height: 78px; }
+.cup-visual.K {
+  width: 28px; height: 42px;
+  border-radius: 2px 2px 7px 7px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(240,235,226,0.92));
+  border-color: rgba(232, 184, 138, 0.5);
+}
 .cup-visual .liquid {
   position: absolute;
   bottom: 0; left: 0; right: 0;
@@ -371,6 +377,67 @@ h1 {
 .action-btn.take      { background: var(--success-soft);       color: var(--success); border-color: rgba(132, 204, 150, 0.30); }
 .action-btn.discard   { background: var(--danger-soft);        color: var(--danger);  border-color: rgba(232, 128, 128, 0.32); }
 .action-btn.place     { background: var(--accent-soft);        color: var(--accent);  border-color: var(--accent-border); }
+.action-btn.use-saved { background: rgba(232, 184, 138, 0.18); color: var(--accent);  border-color: var(--accent-border); }
+.action-btn.use-saved.bank-empty { display: none; }
+
+/* Keeper cup: hide irrelevant action buttons */
+.cup-slot.keeper .ing-milk,
+.cup-slot.keeper .ing-water,
+.cup-slot.keeper .ing-choc,
+.cup-slot.keeper .use-saved,
+.cup-slot.keeper .take { display: none; }
+
+/* Shot bank ─────────────────────────── */
+.shot-bank-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.bank-label {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 600;
+}
+.bank-slots { display: flex; gap: 8px; }
+.bank-slot {
+  width: 22px; height: 30px;
+  border-radius: 2px 2px 6px 6px;
+  background: rgba(255,255,255,0.03);
+  border: 1px dashed rgba(255,255,255,0.10);
+  position: relative;
+  overflow: hidden;
+  transition: all var(--t);
+}
+.bank-slot.filled {
+  background: linear-gradient(180deg, #ffffff, #f0ebe2);
+  border: 1.5px solid rgba(232, 184, 138, 0.45);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+}
+.bank-slot.filled::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 72%;
+  background: linear-gradient(180deg, #8b4a20, #3d1f08);
+}
+.bank-count {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.bank-help {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  margin-left: auto;
+  line-height: 1.5;
+}
 
 .hidden { display: none !important; }
 
