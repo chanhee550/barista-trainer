@@ -16,9 +16,17 @@ const CUP_LABEL = { S: 'Small', M: 'Medium', L: 'Large' };
 const ING_LABEL = { milk: 'Milk', hot_water: 'Hot Water', chocolate: 'Chocolate' };
 const ING_EMOJI = { milk: '🥛', hot_water: '💧', chocolate: '🍫' };
 
+// Visual / timing constants
+const SHOT_FILL_PCT = 27;       // % cup fill per shot
+const HOT_WATER_FILL_PCT = 25;  // additional % when hot water added
+const MAX_CUP_FILL_PCT = 95;
+const TOAST_DURATION_MS = 2600;
+
 let state;
 let gameStarted = false;
-const orderCardCache = new Map(); // orderId -> DOM element
+let toastTimer = null;
+const orderCardCache = new Map();  // orderId -> { el, fill, info, ings }
+const slotRefs = [[null, null], [null, null]];  // [station][cupIdx] -> { display, status, actions }
 
 function emptyStation() {
   return {
@@ -225,7 +233,7 @@ function ingredientsMatch(a, b) {
 }
 
 function describeIngredients(ings) {
-  return ings.length === 0 ? 'no extras' : ings.map(i => ING_EMOJI[i]).join(' ');
+  return ings.length === 0 ? '추가 없음' : ings.map(i => ING_EMOJI[i]).join(' ');
 }
 
 function serveTo(orderId) {
@@ -269,15 +277,29 @@ function toast(msg, type) {
   const el = document.getElementById('toast');
   el.textContent = msg;
   el.className = 'toast show ' + (type || '');
-  clearTimeout(toast._t);
-  toast._t = setTimeout(() => el.classList.remove('show'), 2600);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), TOAST_DURATION_MS);
 }
 
 // === Render: stations use static DOM, only update inner content/visibility ===
 
-function buildCupActionButtons(slotEl, stationIdx, cupIdx) {
-  // Called once, on first time slot becomes occupied
-  slotEl.querySelector('.cup-actions').innerHTML = `
+function initSlotRefs() {
+  for (let s = 0; s < 2; s++) {
+    const stEl = document.querySelector(`.station[data-station="${s}"]`);
+    for (let i = 0; i < 2; i++) {
+      const slot = stEl.querySelector(`.cup-slot[data-cup-index="${i}"]`);
+      slotRefs[s][i] = {
+        slot,
+        display: slot.querySelector('.cup-display'),
+        status: slot.querySelector('.cup-status'),
+        actions: slot.querySelector('.cup-actions'),
+      };
+    }
+  }
+}
+
+function buildCupActionButtons(actionsEl, cupIdx) {
+  actionsEl.innerHTML = `
     <button class="action-btn ing-milk"  data-action="add"     data-cup-index="${cupIdx}" data-ing="milk">🥛</button>
     <button class="action-btn ing-water" data-action="add"     data-cup-index="${cupIdx}" data-ing="hot_water">💧</button>
     <button class="action-btn ing-choc"  data-action="add"     data-cup-index="${cupIdx}" data-ing="chocolate">🍫</button>
@@ -286,7 +308,26 @@ function buildCupActionButtons(slotEl, stationIdx, cupIdx) {
   `;
 }
 
-function renderStation(stationIdx) {
+// Reuse cup-visual DOM across frames — only recreate when cup size changes
+function renderCupVisual(display, c, fillPct) {
+  let cv = display.firstElementChild;
+  const isVisual = cv && cv.classList && cv.classList.contains('cup-visual');
+  if (!isVisual || cv.dataset.size !== c.cup) {
+    display.innerHTML = '';
+    cv = document.createElement('div');
+    cv.dataset.size = c.cup;
+    const liquidEl = document.createElement('div');
+    liquidEl.className = 'liquid';
+    cv.appendChild(liquidEl);
+    display.appendChild(cv);
+  }
+  cv.className = 'cup-visual ' + c.cup
+    + (c.ingredients.includes('milk') ? ' has-milk' : '')
+    + (c.ingredients.includes('chocolate') ? ' has-choc' : '');
+  cv.firstElementChild.style.height = fillPct + '%';
+}
+
+function renderStation(stationIdx, now) {
   const s = state.stations[stationIdx];
   const stEl = document.querySelector(`.station[data-station="${stationIdx}"]`);
   stEl.classList.toggle('pulling', s.pulling);
@@ -299,8 +340,7 @@ function renderStation(stationIdx) {
   const pullBtn = stEl.querySelector('.pull-btn');
   pullBtn.disabled = !canPull;
   if (s.pulling) {
-    const elapsed = Date.now() - s.pullStart;
-    const prog = Math.min(100, Math.floor(100 * elapsed / s.pullDuration));
+    const prog = Math.min(100, Math.floor(100 * (now - s.pullStart) / s.pullDuration));
     pullBtn.textContent = `Pulling… ${prog}%`;
   } else {
     pullBtn.textContent = presentCount === 0
@@ -317,46 +357,41 @@ function renderStation(stationIdx) {
   });
 
   for (let i = 0; i < 2; i++) {
-    const slot = stEl.querySelector(`.cup-slot[data-cup-index="${i}"]`);
-    const display = slot.querySelector('.cup-display');
-    const status = slot.querySelector('.cup-status');
-    const actions = slot.querySelector('.cup-actions');
+    const { slot, display, status, actions } = slotRefs[stationIdx][i];
     const c = s.cups[i];
 
     if (!c) {
       slot.classList.add('empty');
       const canPlace = !!state.held && !s.pulling;
       slot.classList.toggle('can-place', canPlace);
-      display.innerHTML = `<div class="empty-slot-text">${canPlace ? '👆 여기 놓기' : '컵 없음'}</div>`;
-      status.textContent = '';
-      actions.innerHTML = '';
+      const txt = canPlace ? '👆 여기 놓기' : '컵 없음';
+      // Only rewrite if changed
+      if (display.firstElementChild && display.firstElementChild.className === 'empty-slot-text') {
+        if (display.firstElementChild.textContent !== txt) display.firstElementChild.textContent = txt;
+      } else {
+        display.innerHTML = `<div class="empty-slot-text"></div>`;
+        display.firstElementChild.textContent = txt;
+      }
+      if (status.textContent !== '') status.textContent = '';
+      if (actions.firstChild) actions.innerHTML = '';
       continue;
     }
 
     slot.classList.remove('empty', 'can-place');
-    // (Re)build action buttons if missing
-    if (!actions.querySelector('button')) {
-      buildCupActionButtons(slot, stationIdx, i);
-    }
+    if (!actions.firstChild) buildCupActionButtons(actions, i);
 
-    // Cup visual
-    const shotPct = 27;
-    let fillPct = c.shots * shotPct;
+    // Cup fill calculation
+    let fillPct = c.shots * SHOT_FILL_PCT;
     if (s.pulling) {
-      const elapsed = Date.now() - s.pullStart;
-      const progress = Math.min(1, elapsed / s.pullDuration);
-      const added = (c.targetShots - c.shots) * shotPct * progress;
-      fillPct += added;
+      const progress = Math.min(1, (now - s.pullStart) / s.pullDuration);
+      fillPct += (c.targetShots - c.shots) * SHOT_FILL_PCT * progress;
     }
-    if (c.ingredients.includes('hot_water')) fillPct = Math.min(95, fillPct + 25);
-    fillPct = Math.min(95, fillPct);
+    if (c.ingredients.includes('hot_water')) fillPct += HOT_WATER_FILL_PCT;
+    fillPct = Math.min(MAX_CUP_FILL_PCT, fillPct);
 
-    const cls = ['cup-visual', c.cup];
-    if (c.ingredients.includes('milk')) cls.push('has-milk');
-    if (c.ingredients.includes('chocolate')) cls.push('has-choc');
-    display.innerHTML = `<div class="${cls.join(' ')}"><div class="liquid" style="height:${fillPct}%"></div></div>`;
+    renderCupVisual(display, c, fillPct);
 
-    // Status
+    // Status text
     let statusText;
     if (s.pulling && c.targetShots > c.shots) {
       statusText = `Pulling → ${c.targetShots} shot${c.targetShots>1?'s':''}`;
@@ -366,7 +401,7 @@ function renderStation(stationIdx) {
     } else {
       statusText = `${CUP_LABEL[c.cup]} cup`;
     }
-    status.textContent = statusText;
+    if (status.textContent !== statusText) status.textContent = statusText;
 
     // Button enable/disable
     const noShots = c.shots === 0;
@@ -378,47 +413,60 @@ function renderStation(stationIdx) {
   }
 }
 
-function renderOrders() {
+function renderOrders(now) {
   const ordersEl = document.getElementById('orders');
-  const cfg = levelConfig(state.level);
   const currentIds = new Set(state.orders.map(o => o.id));
 
   // Remove gone cards
-  for (const [id, el] of orderCardCache.entries()) {
+  for (const [id, entry] of orderCardCache.entries()) {
     if (!currentIds.has(id)) {
-      el.remove();
+      entry.el.remove();
       orderCardCache.delete(id);
     }
   }
 
   // Add new + update existing
   for (const o of state.orders) {
-    let card = orderCardCache.get(o.id);
-    if (!card) {
-      card = document.createElement('div');
+    let entry = orderCardCache.get(o.id);
+    if (!entry) {
+      const card = document.createElement('div');
       card.className = 'order';
       card.dataset.orderId = o.id;
-      const ingHtml = o.ingredients.map(i => ING_EMOJI[i]).join(' ') || '–';
-      card.innerHTML = `
-        <div class="name">${o.name}</div>
-        ${o.modLabel ? `<div class="mod">${o.modLabel}</div>` : ''}
-        <div class="info">${CUP_LABEL[o.cup]}, ${o.shots} shot${o.shots>1?'s':''}</div>
-        <div class="ings">${ingHtml}</div>
-        <div class="timer"><div class="timer-fill"></div></div>
-      `;
+      // Build via DOM API (defensive, even though o.name comes from hardcoded DRINKS)
+      const nameEl = document.createElement('div');
+      nameEl.className = 'name';
+      nameEl.textContent = o.name;
+      card.appendChild(nameEl);
+      if (o.modLabel) {
+        const modEl = document.createElement('div');
+        modEl.className = 'mod';
+        modEl.textContent = o.modLabel;
+        card.appendChild(modEl);
+      }
+      const infoEl = document.createElement('div');
+      infoEl.className = 'info';
+      infoEl.textContent = `${CUP_LABEL[o.cup]}, ${o.shots} shot${o.shots>1?'s':''}`;
+      card.appendChild(infoEl);
+      const ingsEl = document.createElement('div');
+      ingsEl.className = 'ings';
+      ingsEl.textContent = o.ingredients.length ? o.ingredients.map(i => ING_EMOJI[i]).join(' ') : '–';
+      card.appendChild(ingsEl);
+      const timerEl = document.createElement('div');
+      timerEl.className = 'timer';
+      const fillEl = document.createElement('div');
+      fillEl.className = 'timer-fill';
+      timerEl.appendChild(fillEl);
+      card.appendChild(timerEl);
+
       ordersEl.appendChild(card);
-      orderCardCache.set(o.id, card);
+      entry = { el: card, fill: fillEl };
+      orderCardCache.set(o.id, entry);
     }
-    card.classList.toggle('servable', !!state.held);
-    const elapsed = Date.now() - o.createdAt;
-    const pct = Math.max(0, 100 * (1 - elapsed / o.timeout));
-    const fill = card.querySelector('.timer-fill');
-    fill.style.width = pct + '%';
-    fill.className = 'timer-fill' + (pct < 25 ? ' danger' : pct < 50 ? ' warn' : '');
-    const info = card.querySelector('.info');
-    const ings = card.querySelector('.ings');
-    if (info) info.style.display = cfg.showDetails ? '' : 'none';
-    if (ings) ings.style.display = cfg.showDetails ? '' : 'none';
+    entry.el.classList.toggle('servable', !!state.held);
+    const pct = Math.max(0, 100 * (1 - (now - o.createdAt) / o.timeout));
+    entry.fill.style.width = pct + '%';
+    const newCls = 'timer-fill' + (pct < 25 ? ' danger' : pct < 50 ? ' warn' : '');
+    if (entry.fill.className !== newCls) entry.fill.className = newCls;
   }
 
   // Empty placeholder
@@ -435,26 +483,43 @@ function renderOrders() {
   }
 }
 
-function render() {
-  document.getElementById('score').textContent = state.score;
-  document.getElementById('lives').textContent = '❤'.repeat(state.lives) + '🖤'.repeat(Math.max(0, 3 - state.lives));
-  document.getElementById('level').textContent = state.level;
-  document.getElementById('streak').textContent = state.streak;
+// Cache HUD refs (set after DOM available, see initSlotRefs caller)
+let hudRefs = null;
+function initHudRefs() {
+  hudRefs = {
+    score: document.getElementById('score'),
+    lives: document.getElementById('lives'),
+    level: document.getElementById('level'),
+    streak: document.getElementById('streak'),
+    held: document.getElementById('held-cup'),
+    heldLabel: document.getElementById('held-cup-label'),
+  };
+}
 
-  renderOrders();
-  renderStation(0);
-  renderStation(1);
+function render(now) {
+  // Only write to DOM if value changed (avoid unnecessary reflows)
+  const scoreStr = String(state.score);
+  if (hudRefs.score.textContent !== scoreStr) hudRefs.score.textContent = scoreStr;
+  const livesStr = '❤'.repeat(state.lives) + '🖤'.repeat(Math.max(0, 3 - state.lives));
+  if (hudRefs.lives.textContent !== livesStr) hudRefs.lives.textContent = livesStr;
+  const levelStr = String(state.level);
+  if (hudRefs.level.textContent !== levelStr) hudRefs.level.textContent = levelStr;
+  const streakStr = String(state.streak);
+  if (hudRefs.streak.textContent !== streakStr) hudRefs.streak.textContent = streakStr;
 
-  const held = document.getElementById('held-cup');
-  const heldLabel = document.getElementById('held-cup-label');
+  renderOrders(now);
+  renderStation(0, now);
+  renderStation(1, now);
+
   if (state.held) {
-    held.classList.add('active');
+    hudRefs.held.classList.add('active');
     const ingTxt = state.held.ingredients.length > 0
       ? ' + ' + state.held.ingredients.map(i => ING_EMOJI[i]).join(' ')
       : '';
-    heldLabel.textContent = `🥤 ${CUP_LABEL[state.held.cup]} · ${state.held.shots} shot${state.held.shots>1?'s':''}${ingTxt}`;
+    const heldText = `🥤 ${CUP_LABEL[state.held.cup]} · ${state.held.shots} shot${state.held.shots>1?'s':''}${ingTxt}`;
+    if (hudRefs.heldLabel.textContent !== heldText) hudRefs.heldLabel.textContent = heldText;
   } else {
-    held.classList.remove('active');
+    hudRefs.held.classList.remove('active');
   }
 }
 
@@ -538,13 +603,18 @@ function toggleMenu() {
 
 function gameLoop() {
   if (gameStarted && state && !state.gameOver) {
+    const now = Date.now();
     maybeSpawnOrder();
     updateOrders();
     updatePulls();
+    render(now);
   }
-  if (state) render();
+  // Game over: overlay covers the UI, no need to keep rendering.
+  // Not started: start-screen overlay covers the UI.
   requestAnimationFrame(gameLoop);
 }
 
+initSlotRefs();
+initHudRefs();
 initState();
 gameLoop();
